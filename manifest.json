@@ -1,0 +1,9 @@
+{
+  "id": "autotoc",
+  "name": "AutoTOC",
+  "version": "1.0.0",
+  "minAppVersion": "1.5.0",
+  "description": "Automatically creates and updates a table of contents in the current note from its headings.",
+  "author": "Lawrence Walters",
+  "isDesktopOnly": false
+}
