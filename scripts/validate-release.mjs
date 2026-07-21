@@ -13,6 +13,7 @@ const requiredManifestFields = [
 const manifest = JSON.parse(await readFile("manifest.json", "utf8"));
 const versions = JSON.parse(await readFile("versions.json", "utf8"));
 const source = await readFile("main.ts", "utf8");
+const tocSource = await readFile("toc.ts", "utf8");
 const compiled = await readFile("main.js", "utf8");
 const packageJsonSource = await readFile("package.json", "utf8");
 const packageLockSource = await readFile("package-lock.json", "utf8");
@@ -85,6 +86,10 @@ if (/\bdisplay\s*\(\s*\)\s*:/.test(source)) {
 
 if (/\.setWarning\s*\(/.test(source) || /\.setWarning\s*\(/.test(compiled)) {
   throw new Error("use setDestructive() instead of the deprecated setWarning() button API");
+}
+
+if (tocSource.includes("\\)")) {
+  throw new Error("toc.ts contains an unnecessary escaped closing parenthesis");
 }
 
 if (/\bdisplay\s*\(\s*\)\s*[{:]?/.test(compiled)) {

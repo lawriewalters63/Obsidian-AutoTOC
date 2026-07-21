@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4
+
+- Revalidated command names against the Community Plugin Directory rule that omits the plugin name.
+- Revalidated searchable settings using `getSettingDefinitions()` with no deprecated `display()` override.
+- Revalidated destructive buttons using `setDestructive()` instead of `setWarning()`.
+- Revalidated the native Node.js built-in module list and regular expressions against the reported warnings.
+
 ## 1.0.3
 
 - Removed GitHub Actions workflow files.
