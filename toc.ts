@@ -91,7 +91,7 @@ function tocRange(lines: string[]): TocRange | null {
 function cleanHeading(raw: string): string {
   return raw
     .replace(/\s+#+\s*$/, "")
-    .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+[)]/g, "$1")
     .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_match, target: string, alias?: string) => alias ?? target)
     .replace(/[*_~`]/g, "")
     .trim();

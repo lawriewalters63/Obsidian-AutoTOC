@@ -1,6 +1,8 @@
 import esbuild from "esbuild";
+import { builtinModules } from "node:module";
 import process from "process";
-import builtins from "builtin-modules";
+
+const builtins = builtinModules.flatMap((moduleName) => [moduleName, `node:${moduleName}`]);
 
 const production = process.argv[2] === "production";
 const context = await esbuild.context({

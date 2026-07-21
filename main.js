@@ -94,7 +94,7 @@ function tocRange(lines) {
   return end < 0 ? { start, end: start } : { start, end };
 }
 function cleanHeading(raw) {
-  return raw.replace(/\s+#+\s*$/, "").replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1").replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_match, target, alias) => alias != null ? alias : target).replace(/[*_~`]/g, "").trim();
+  return raw.replace(/\s+#+\s*$/, "").replace(/\[([^\]]+)\]\([^)]+[)]/g, "$1").replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_match, target, alias) => alias != null ? alias : target).replace(/[*_~`]/g, "").trim();
 }
 function extractHeadings(markdown) {
   var _a;
@@ -247,7 +247,7 @@ var AutomaticTableOfContentsPlugin = class extends import_obsidian.Plugin {
     });
     this.addCommand({
       id: "remove-tocs-from-all-notes",
-      name: "Remove AutoTOC from all notes",
+      name: "Remove tables of contents from all notes",
       callback: () => this.confirmRemoveAll()
     });
     this.registerEvent(this.app.workspace.on("editor-change", (editor, view) => {
@@ -361,55 +361,107 @@ var AutomaticTableOfContentsPlugin = class extends import_obsidian.Plugin {
   }
 };
 var AutomaticTocSettingTab = class extends import_obsidian.PluginSettingTab {
-  constructor(app, plugin) {
-    super(app, plugin);
-    this.plugin = plugin;
+  constructor(app, autoTocPlugin) {
+    super(app, autoTocPlugin);
+    this.autoTocPlugin = autoTocPlugin;
   }
-  display() {
-    const { containerEl } = this;
-    containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("Automatic updates").setDesc("Update the table of contents after headings change in the active note.").addToggle((toggle) => toggle.setValue(this.plugin.settings.automatic).onChange(async (value) => {
-      this.plugin.settings.automatic = value;
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian.Setting(containerEl).setName("Table title").setDesc("Leave blank to omit the title above the list.").addText((text) => text.setPlaceholder("Table of contents").setValue(this.plugin.settings.title).onChange(async (value) => {
-      this.plugin.settings.title = value;
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian.Setting(containerEl).setName("Include level 1 headings").addToggle((toggle) => toggle.setValue(this.plugin.settings.includeH1).onChange(async (value) => {
-      this.plugin.settings.includeH1 = value;
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian.Setting(containerEl).setName("Minimum heading level").addDropdown((dropdown) => {
-      for (let level = 1; level <= 6; level += 1) dropdown.addOption(String(level), `H${level}`);
-      dropdown.setValue(String(this.plugin.settings.minLevel)).onChange(async (value) => {
-        this.plugin.settings.minLevel = Number(value);
-        if (this.plugin.settings.maxLevel < this.plugin.settings.minLevel) this.plugin.settings.maxLevel = this.plugin.settings.minLevel;
-        await this.plugin.saveSettings();
-        this.display();
-      });
-    });
-    new import_obsidian.Setting(containerEl).setName("Maximum heading level").addDropdown((dropdown) => {
-      for (let level = this.plugin.settings.minLevel; level <= 6; level += 1) dropdown.addOption(String(level), `H${level}`);
-      dropdown.setValue(String(this.plugin.settings.maxLevel)).onChange(async (value) => {
-        this.plugin.settings.maxLevel = Number(value);
-        await this.plugin.saveSettings();
-      });
-    });
-    new import_obsidian.Setting(containerEl).setName("TOC placement").addDropdown((dropdown) => dropdown.addOption("first-h1", "After the first H1").addOption("frontmatter", "After frontmatter").setValue(this.plugin.settings.placement).onChange(async (value) => {
-      this.plugin.settings.placement = value;
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian.Setting(containerEl).setName("Update delay").setDesc("Wait time after typing before updating, in milliseconds.").addText((text) => text.setValue(String(this.plugin.settings.delayMs)).onChange(async (value) => {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed >= 200 && parsed <= 1e4) {
-        this.plugin.settings.delayMs = Math.round(parsed);
-        await this.plugin.saveSettings();
+  getSettingDefinitions() {
+    const headingOptions = Object.fromEntries(
+      Array.from({ length: 6 }, (_, index) => [String(index + 1), `H${index + 1}`])
+    );
+    return [
+      {
+        name: "Automatic updates",
+        desc: "Update the table of contents after headings change in the active note.",
+        control: { type: "toggle", key: "automatic", defaultValue: DEFAULT_SETTINGS.automatic }
+      },
+      {
+        name: "Table title",
+        desc: "Leave blank to omit the title above the list.",
+        control: { type: "text", key: "title", placeholder: "Table of contents", defaultValue: DEFAULT_SETTINGS.title }
+      },
+      {
+        name: "Include level 1 headings",
+        control: { type: "toggle", key: "includeH1", defaultValue: DEFAULT_SETTINGS.includeH1 }
+      },
+      {
+        name: "Minimum heading level",
+        control: { type: "dropdown", key: "minLevel", options: headingOptions, defaultValue: String(DEFAULT_SETTINGS.minLevel) }
+      },
+      {
+        name: "Maximum heading level",
+        control: { type: "dropdown", key: "maxLevel", options: headingOptions, defaultValue: String(DEFAULT_SETTINGS.maxLevel) }
+      },
+      {
+        name: "TOC placement",
+        control: {
+          type: "dropdown",
+          key: "placement",
+          options: { "first-h1": "After the first H1", frontmatter: "After frontmatter" },
+          defaultValue: DEFAULT_SETTINGS.placement
+        }
+      },
+      {
+        name: "Update delay",
+        desc: "Wait time after typing before updating, in milliseconds.",
+        control: {
+          type: "number",
+          key: "delayMs",
+          min: 200,
+          max: 1e4,
+          step: 100,
+          defaultValue: DEFAULT_SETTINGS.delayMs,
+          validate: (value) => value >= 200 && value <= 1e4 ? void 0 : "Enter a value from 200 to 10,000."
+        }
+      },
+      {
+        name: "Regenerate existing TOCs",
+        desc: "Update AutoTOC blocks that already exist across all Markdown notes.",
+        render: (setting) => {
+          setting.addButton((button) => button.setButtonText("Regenerate all").onClick(() => this.autoTocPlugin.confirmBulkUpdate(false)));
+        }
+      },
+      {
+        name: "Include TOC on all notes",
+        desc: "Generate or update AutoTOC in every Markdown note that has eligible headings.",
+        render: (setting) => {
+          setting.addButton((button) => button.setButtonText("Generate on all notes").setDestructive().onClick(() => this.autoTocPlugin.confirmBulkUpdate(true)));
+        }
+      },
+      {
+        name: "Remove AutoTOC from all notes",
+        desc: "Delete every generated AutoTOC block and NoTOC property before uninstalling the plugin.",
+        render: (setting) => {
+          setting.addButton((button) => button.setButtonText("Remove from all notes").setDestructive().onClick(() => this.autoTocPlugin.confirmRemoveAll()));
+        }
       }
-    }));
-    new import_obsidian.Setting(containerEl).setName("Regenerate existing TOCs").setDesc("Update AutoTOC blocks that already exist across all Markdown notes.").addButton((button) => button.setButtonText("Regenerate all").onClick(() => this.plugin.confirmBulkUpdate(false)));
-    new import_obsidian.Setting(containerEl).setName("Include TOC on all notes").setDesc("Generate or update AutoTOC in every Markdown note that has eligible headings.").addButton((button) => button.setButtonText("Generate on all notes").setWarning().onClick(() => this.plugin.confirmBulkUpdate(true)));
-    new import_obsidian.Setting(containerEl).setName("Remove AutoTOC from all notes").setDesc("Delete every generated AutoTOC block and NoTOC property before uninstalling the plugin.").addButton((button) => button.setButtonText("Remove from all notes").setWarning().onClick(() => this.plugin.confirmRemoveAll()));
+    ];
+  }
+  getControlValue(key) {
+    const value = this.autoTocPlugin.settings[key];
+    return key === "minLevel" || key === "maxLevel" ? String(value) : value;
+  }
+  async setControlValue(key, value) {
+    if (key === "minLevel" || key === "maxLevel") {
+      this.autoTocPlugin.settings[key] = Number(value);
+      if (this.autoTocPlugin.settings.maxLevel < this.autoTocPlugin.settings.minLevel) {
+        if (key === "minLevel") this.autoTocPlugin.settings.maxLevel = this.autoTocPlugin.settings.minLevel;
+        else this.autoTocPlugin.settings.minLevel = this.autoTocPlugin.settings.maxLevel;
+      }
+      await this.autoTocPlugin.saveSettings();
+      this.update();
+      return;
+    }
+    if (key === "automatic" || key === "includeH1") {
+      this.autoTocPlugin.settings[key] = Boolean(value);
+    } else if (key === "delayMs") {
+      this.autoTocPlugin.settings.delayMs = Math.round(Number(value));
+    } else if (key === "placement") {
+      this.autoTocPlugin.settings.placement = value;
+    } else if (key === "title") {
+      this.autoTocPlugin.settings.title = String(value);
+    }
+    await this.autoTocPlugin.saveSettings();
   }
 };
 var BulkUpdateConfirmModal = class extends import_obsidian.Modal {
@@ -446,7 +498,7 @@ var RemoveAllConfirmModal = class extends import_obsidian.Modal {
     });
     const controls = new import_obsidian.Setting(this.contentEl);
     controls.addButton((button) => button.setButtonText("Cancel").onClick(() => this.close()));
-    controls.addButton((button) => button.setButtonText("Remove from all notes").setWarning().onClick(() => {
+    controls.addButton((button) => button.setButtonText("Remove from all notes").setDestructive().setCta().onClick(() => {
       this.close();
       this.onConfirm();
     }));

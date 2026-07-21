@@ -50,7 +50,7 @@ Open a Markdown note containing headings. The TOC is inserted automatically afte
 - **AutoTOC: Remove table of contents**
 - **AutoTOC: Regenerate existing tables of contents in all notes**
 - **AutoTOC: Generate or update tables of contents in all notes**
-- **AutoTOC: Remove AutoTOC from all notes**
+- **AutoTOC: Remove tables of contents from all notes**
 
 Change behaviour under **Settings → AutoTOC**.
 
@@ -66,7 +66,7 @@ AutoTOC works locally inside your vault. It does not collect telemetry, make net
 
 ## Compatibility
 
-AutoTOC requires Obsidian 1.5.0 or later and supports desktop and mobile.
+AutoTOC requires Obsidian 1.13.0 or later and supports desktop and mobile.
 
 ## Development
 
